@@ -1,1 +1,1 @@
-# bridge-we-contracts
+# West contracts

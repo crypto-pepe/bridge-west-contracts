@@ -1,0 +1,45 @@
+{
+  "defaultEnvName": "testnet",
+  "testnet": {
+    "leasingNode": {
+      "infraFee": 2500,
+      "maxInfraFee": 10000
+    },
+    "assets": [
+      {
+        "name": "WBTC",
+        "description": "Wrapped BTC",
+        "quantity": 100000000000000000,
+        "decimals": 8,
+        "assetId": ""
+      },
+      {
+        "name": "WETH",
+        "description": "Wrapped ETH",
+        "quantity": 100000000000000000,
+        "decimals": 8,
+        "assetId": ""
+      }
+    ],
+    "accounts": ["neo", "morpheus", "trinity", "max"],
+    "amountPerAccount": 100000000000,
+    "contracts": ["multisig", "technical"],
+    "amountPerContract": 10000000000,
+    "nonceOffset": 1,
+    "network": {
+      "name": "testnet",
+      "nodeAPI": "https://testnet.welocal.dev/node-0",
+      "nodeTimeout": 30000,
+      "chainID": 84,
+      "apiKey": "",
+      "transferFee": 1000000,
+      "invokeFee": 10000000,
+      "additionalFee": 400000,
+      "issueFee": 100000000,
+      "setWasmScriptFee": 100000000,
+      "setScriptFee": 1400000
+    },
+    "migrationContractAddress": "BStyatzGv2Hj1uCaGxymvLtYSEC3pzqrdUngrEopxVXf",
+    "multisigContractAddress": "9Zr9mUTwe62HBCpe7XTpJsJteLT4CpMrrQMaG4ry1VPE"
+  }
+}
