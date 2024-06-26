@@ -5,6 +5,7 @@ use we_cdk::*;
 
 const SEP: String = "__";
 const FUNC_SEP: String = "####";
+const KEY_INIT: String = "INIT";
 const KEY_THIS: String = "THIS";
 const KEY_MULTISIG: String = "MULTISIG";
 const KEY_STATUS: String = "STATUS";
@@ -30,6 +31,25 @@ fn validate_contract(contract: &[u8]) -> bool {
     contract.len() == 32
 }
 
+#[no_mangle]
+#[inline(always)]
+fn verify_multisig_confirmation() -> i32 {
+    unsafe {
+        let tx_id = to_base58_string!(tx!(tx_id));
+        let this = get_storage!(string::KEY_THIS);
+        let multisig = get_storage!(string::KEY_MULTISIG);
+
+        let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
+        require!(
+            contains_key!(base58!(multisig) => status_key)
+                && get_storage!(boolean::base58!(multisig) => status_key),
+            "verify_multisig_confirmation: revert"
+        );
+    }
+
+    0
+}
+
 #[interface]
 trait caller {
     fn call(
@@ -42,11 +62,25 @@ trait caller {
 
 #[action]
 fn _constructor(multisig: String, protocol_caller: String, root_adapter: String, pauser: String) {
-    require!(validate_contract(base58!(multisig)));
-    require!(validate_contract(base58!(protocol_caller)));
-    require!(validate_contract(base58!(root_adapter)));
-    require!(validate_address(base58!(pauser)));
+    require!(!contains_key!(KEY_INIT), "_constructor: already inited");
+    require!(
+        validate_contract(base58!(multisig)),
+        "_constructor: inv multisig"
+    );
+    require!(
+        validate_contract(base58!(protocol_caller)),
+        "_constructor: inv protocol_caller"
+    );
+    require!(
+        validate_contract(base58!(root_adapter)),
+        "_constructor: inv root_adapter"
+    );
+    require!(
+        validate_address(base58!(pauser)),
+        "_constructor: inv pauser"
+    );
 
+    set_storage!(boolean::KEY_INIT => true);
     set_storage!(string::KEY_THIS => to_base58_string!(tx!(tx_id)));
     set_storage!(string::KEY_MULTISIG => multisig);
     set_storage!(string::KEY_PROTOCOL_CALLER => protocol_caller);
@@ -67,14 +101,17 @@ fn release_tokens(
 ) {
     let caller = to_base58_string!(caller!());
 
-    require!(!get_storage!(boolean::KEY_PAUSED));
-    require!(equals!(
-        string::caller,
-        get_storage!(string::KEY_ROOT_ADAPTER)
-    ));
+    require!(!get_storage!(boolean::KEY_PAUSED), "release_tokens: paused");
+    require!(
+        equals!(string::caller, get_storage!(string::KEY_ROOT_ADAPTER)),
+        "release_tokens: inv caller"
+    );
 
     if execution_asset == WAVES {
-        require!(contains_key!(KEY_COIN_BRIDGE_CONTRACT));
+        require!(
+            contains_key!(KEY_COIN_BRIDGE_CONTRACT),
+            "release_tokens: coin bridge contract not set"
+        );
         let execution_contract = get_storage!(string::KEY_COIN_BRIDGE_CONTRACT);
         let args = join!(
             string::to_string_int!(amount),
@@ -92,7 +129,10 @@ fn release_tokens(
             caller(base58!(get_storage!(string::KEY_PROTOCOL_CALLER)))::call(execution_chain_id, execution_contract, FUNC_RELEASE_TOKENS, args.as_ref())
         };
     } else {
-        require!(contains_key!(KEY_TOKEN_BRIDGE_CONTRACT));
+        require!(
+            contains_key!(KEY_TOKEN_BRIDGE_CONTRACT),
+            "release_tokens: token bridge contract not set"
+        );
         let execution_contract = get_storage!(string::KEY_TOKEN_BRIDGE_CONTRACT);
         let args = join!(
             string::execution_asset,
@@ -126,13 +166,16 @@ fn mint_tokens(
 ) {
     let caller = to_base58_string!(caller!());
 
-    require!(!get_storage!(boolean::KEY_PAUSED));
-    require!(equals!(
-        string::caller,
-        get_storage!(string::KEY_ROOT_ADAPTER)
-    ));
+    require!(!get_storage!(boolean::KEY_PAUSED), "mint_tokens: paused");
+    require!(
+        equals!(string::caller, get_storage!(string::KEY_ROOT_ADAPTER)),
+        "mint_tokens: inv caller"
+    );
 
-    require!(contains_key!(KEY_WRAPPED_TOKEN_BRIDGE_CONTRACT));
+    require!(
+        contains_key!(KEY_WRAPPED_TOKEN_BRIDGE_CONTRACT),
+        "mint_tokens: wrapped token bridge contract not set"
+    );
     let execution_contract = get_storage!(string::KEY_WRAPPED_TOKEN_BRIDGE_CONTRACT);
     let args = join!(
         string::execution_asset,
@@ -155,51 +198,42 @@ fn mint_tokens(
 
 #[action]
 fn set_coin_bridge_contract(contract: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
-    require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
-    );
-
-    require!(contract.len() > 0);
+    require!(contract.len() > 0, "set_coin_bridge_contract: inv contract");
 
     set_storage!(string::KEY_COIN_BRIDGE_CONTRACT => contract);
 }
 
 #[action]
 fn set_token_bridge_contract(contract: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        contract.len() > 0,
+        "set_token_bridge_contract: inv contract"
     );
-
-    require!(contract.len() > 0);
 
     set_storage!(string::KEY_TOKEN_BRIDGE_CONTRACT => contract);
 }
 
 #[action]
 fn set_wrapped_token_bridge_contract(contract: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        contract.len() > 0,
+        "set_wrapped_token_bridge_contract: inv contract"
     );
-
-    require!(contract.len() > 0);
 
     set_storage!(string::KEY_WRAPPED_TOKEN_BRIDGE_CONTRACT => contract);
 }
@@ -208,8 +242,11 @@ fn set_wrapped_token_bridge_contract(contract: String) {
 fn pause() {
     let sender: String = to_base58_string!(tx!(sender));
 
-    require!(equals!(string::sender, get_storage!(string::KEY_PAUSER)));
-    require!(!get_storage!(boolean::KEY_PAUSED));
+    require!(
+        equals!(string::sender, get_storage!(string::KEY_PAUSER)),
+        "pause: not pauser"
+    );
+    require!(!get_storage!(boolean::KEY_PAUSED), "pause: paused");
 
     set_storage!(boolean::KEY_PAUSED => true);
 }
@@ -218,42 +255,41 @@ fn pause() {
 fn unpause() {
     let sender: String = to_base58_string!(tx!(sender));
 
-    require!(equals!(string::sender, get_storage!(string::KEY_PAUSER)));
-    require!(get_storage!(boolean::KEY_PAUSED));
+    require!(
+        equals!(string::sender, get_storage!(string::KEY_PAUSER)),
+        "unpause: not pauser"
+    );
+    require!(get_storage!(boolean::KEY_PAUSED), "unpause: not paused");
 
     set_storage!(boolean::KEY_PAUSED => false);
 }
 
 #[action]
 fn update_pauser(new_pauser: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        validate_address(base58!(new_pauser)),
+        "update_pauser: inv pauser"
     );
-
-    require!(validate_address(base58!(new_pauser)));
 
     set_storage!(string::KEY_PAUSER => new_pauser);
 }
 
 #[action]
 fn update_multisig(new_multisig: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        validate_contract(base58!(new_multisig)),
+        "update_multisig: inv new_multisig"
     );
-
-    require!(validate_contract(base58!(new_multisig)));
 
     set_storage!(string::KEY_MULTISIG => new_multisig);
 }

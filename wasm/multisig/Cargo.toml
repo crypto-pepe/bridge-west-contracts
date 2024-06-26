@@ -17,4 +17,4 @@ panic = 'abort'
 strip = true
 
 [dependencies]
-we-cdk = {version = "0.3.2", git = "https://github.com/waves-enterprise/we-cdk"}
+we-cdk = {version = "0.4.0", git = "https://github.com/waves-enterprise/we-cdk"}

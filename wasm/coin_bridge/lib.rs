@@ -4,6 +4,7 @@
 use we_cdk::*;
 
 const SEP: String = "__";
+const KEY_INIT: String = "INIT";
 const KEY_THIS: String = "THIS";
 const KEY_MULTISIG: String = "MULTISIG";
 const KEY_STATUS: String = "STATUS";
@@ -17,6 +18,7 @@ const KEY_BINDING: String = "BINDING";
 const KEY_FEE: String = "FEE";
 const KEY_BALANCE: String = "BALANCE";
 const KEY_FEE_RECIPIENT: String = "FEE_RECIPIENT";
+const KEY_FEE_CHAIN: String = "FEE_CHAIN";
 const KEY_REFERRER_FEE_PERCENT: String = "REFERRER_FEE_PERCENT";
 
 const SEP_SIZE: Integer = 2;
@@ -33,6 +35,25 @@ fn validate_address(address: &[u8]) -> bool {
 
 fn validate_contract(contract: &[u8]) -> bool {
     contract.len() == 32
+}
+
+#[no_mangle]
+#[inline(always)]
+fn verify_multisig_confirmation() -> i32 {
+    unsafe {
+        let tx_id = to_base58_string!(tx!(tx_id));
+        let this = get_storage!(string::KEY_THIS);
+        let multisig = get_storage!(string::KEY_MULTISIG);
+
+        let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
+        require!(
+            contains_key!(base58!(multisig) => status_key)
+                && get_storage!(boolean::base58!(multisig) => status_key),
+            "verify_multisig_confirmation: revert"
+        );
+    }
+
+    0
 }
 
 fn pow_10(pow: i64) -> i64 {
@@ -85,13 +106,34 @@ fn _constructor(
     adapter: String,
     pauser: String,
     fee_recipient: String,
+    fee_chain_id: Integer,
+    caller_contract: String,
 ) {
-    require!(validate_contract(base58!(multisig)));
-    require!(validate_contract(base58!(executor)));
-    require!(validate_contract(base58!(adapter)));
-    require!(validate_address(base58!(pauser)));
-    require!(fee_recipient.len() > 0);
+    require!(!contains_key!(KEY_INIT), "_constructor: already inited");
+    require!(
+        validate_contract(base58!(multisig)),
+        "_constructor: inv multisig"
+    );
+    require!(
+        validate_contract(base58!(executor)),
+        "_constructor: inv executor"
+    );
+    require!(
+        validate_contract(base58!(adapter)),
+        "_constructor: inv adapter"
+    );
+    require!(
+        validate_address(base58!(pauser)),
+        "_constructor: inv pauser"
+    );
+    require!(fee_recipient.len() > 0, "_constructor: inv fee_recipient");
+    require!(fee_chain_id > 0, "_constructor: inv fee_chain_id");
+    require!(
+        caller_contract.len() > 0,
+        "_constructor: inv caller contract"
+    );
 
+    set_storage!(boolean::KEY_INIT => true);
     set_storage!(string::KEY_THIS => to_base58_string!(tx!(tx_id)));
     set_storage!(string::KEY_MULTISIG => multisig);
     set_storage!(boolean::KEY_PAUSED => false);
@@ -101,6 +143,8 @@ fn _constructor(
     set_storage!(integer::KEY_BALANCE => 0);
     set_storage!(integer::KEY_FEE => 0);
     set_storage!(string::KEY_FEE_RECIPIENT => fee_recipient);
+    set_storage!(integer::KEY_FEE_CHAIN => fee_chain_id);
+    set_storage!(string::KEY_CALLER_CONTRACT => caller_contract);
 }
 
 #[action]
@@ -110,22 +154,28 @@ fn lock_tokens(
     referrer: String,
     gasless_reward: Integer,
 ) {
-    require!(recipient.len() > 0);
-    require!(gasless_reward >= 0);
-    require!(!get_storage!(boolean::KEY_PAUSED));
+    require!(recipient.len() > 0, "lock_tokens: inv recipient");
+    require!(gasless_reward >= 0, "lock_tokens: inv gasless_reward");
+    require!(!get_storage!(boolean::KEY_PAUSED), "lock_tokens: paused");
 
     let chain_key = join!(string::KEY_CHAIN, SEP, to_string_int!(execution_chain_id));
-    require!(contains_key!(chain_key) && get_storage!(boolean::chain_key));
+    require!(
+        contains_key!(chain_key) && get_storage!(boolean::chain_key),
+        "lock_tokens: chain disabled"
+    );
 
     let payments_size = get_tx_payments!();
-    require!(payments_size == 1);
+    require!(payments_size == 1, "lock_tokens: no payments");
 
     let (payment_asset, amount) = get_tx_payment!(0);
-    require!(equals!(binary::payment_asset, SYSTEM_TOKEN));
-    require!(amount > 0);
+    require!(
+        equals!(binary::payment_asset, SYSTEM_TOKEN),
+        "lock_tokens: payment is not WEST"
+    );
+    require!(amount > 0, "lock_tokens: inv amount");
 
     let binding_key = join!(string::KEY_BINDING, SEP, to_string_int!(execution_chain_id));
-    require!(contains_key!(binding_key));
+    require!(contains_key!(binding_key), "lock_tokens: no binding");
     let binding_raw = get_storage!(string::binding_key);
 
     let mut binding_mut = binding_raw.as_bytes();
@@ -165,9 +215,9 @@ fn lock_tokens(
         binding_index += 1;
     }
 
-    require!(execution_asset.len() > 0);
-    require!(amount >= min_amount);
-    require!(enabled);
+    require!(execution_asset.len() > 0, "lock_tokens: inv binding");
+    require!(amount >= min_amount, "lock_tokens: less than min");
+    require!(enabled, "lock_tokens: binding disabled");
 
     let percent = if amount > threshold_fee {
         after_percent_fee
@@ -176,9 +226,9 @@ fn lock_tokens(
     };
 
     let fee = min_fee + (amount * percent / PERCENT_FACTOR);
-    require!(amount > fee);
+    require!(amount > fee, "lock_tokens: fee less than amount");
 
-    let mut referrer_fee_amount = 0;
+    let mut referrer_fee = 0;
     if referrer.len() > 0 {
         let referrer_fee_percent_key = join!(
             string::KEY_REFERRER_FEE_PERCENT,
@@ -192,31 +242,26 @@ fn lock_tokens(
         } else {
             0
         };
-        referrer_fee_amount = referrer_fee_percent * fee / PERCENT_FACTOR;
-        if validate_address(base58!(referrer)) {
-            transfer!(address => base58!(referrer), referrer_fee_amount);
-        } else {
-            transfer!(contract => base58!(referrer), referrer_fee_amount);
-        }
+        referrer_fee = referrer_fee_percent * fee / PERCENT_FACTOR;
     }
 
     let amount_to_send = amount - fee;
-    require!(amount_to_send > gasless_reward);
-
-    let amount_to_fee = fee - referrer_fee_amount;
-    require!(amount_to_fee >= 0);
+    require!(
+        amount_to_send > gasless_reward,
+        "lock_tokens: amount less than gasless_reward"
+    );
 
     let normalized_amount = normalize_decimals(amount_to_send, WEST_DECIMALS, DECIMALS);
     let normalized_gasless = normalize_decimals(gasless_reward, WEST_DECIMALS, DECIMALS);
-    let normalized_referrer_fee = normalize_decimals(referrer_fee_amount, WEST_DECIMALS, DECIMALS);
+    let normalized_referrer_fee = normalize_decimals(referrer_fee, WEST_DECIMALS, DECIMALS);
 
     let root_adapter = base58!(get_storage!(string::KEY_ROOT_ADAPTER));
     call_contract! {
         root_adapter_contract(root_adapter)::mint_tokens(execution_chain_id, execution_asset, normalized_amount, recipient, normalized_gasless, referrer, normalized_referrer_fee)
     };
 
-    set_storage!(integer::KEY_BALANCE => get_storage!(integer::KEY_BALANCE) + amount_to_send + referrer_fee_amount);
-    set_storage!(integer::KEY_FEE => get_storage!(integer::KEY_FEE) + amount_to_fee);
+    set_storage!(integer::KEY_BALANCE => get_storage!(integer::KEY_BALANCE) + amount_to_send + referrer_fee);
+    set_storage!(integer::KEY_FEE => get_storage!(integer::KEY_FEE) + fee - referrer_fee);
 }
 
 #[action]
@@ -231,14 +276,26 @@ fn release_tokens(
     let sender: String = to_base58_string!(tx!(sender));
     let caller: String = to_base58_string!(caller!());
 
-    require!(!get_storage!(boolean::KEY_PAUSED));
-    require!(caller.len() > 0);
-    require!(equals!(string::caller, get_storage!(string::KEY_EXECUTOR)));
-    require!(contains_key!(KEY_CALLER_CONTRACT));
-    require!(caller_contract == get_storage!(string::KEY_CALLER_CONTRACT));
-    require!(validate_address(base58!(recipient)) || validate_contract(base58!(recipient)));
-    require!(amount > 0);
-    require!(gasless_reward >= 0);
+    require!(!get_storage!(boolean::KEY_PAUSED), "release_tokens: paused");
+    require!(caller.len() > 0, "release_tokens: caller is not contract");
+    require!(
+        equals!(string::caller, get_storage!(string::KEY_EXECUTOR)),
+        "release_tokens: only executor"
+    );
+    require!(
+        contains_key!(KEY_CALLER_CONTRACT),
+        "release_tokens: no caller contract key"
+    );
+    require!(
+        caller_contract == get_storage!(string::KEY_CALLER_CONTRACT),
+        "release_tokens: inv caller contract"
+    );
+    require!(
+        validate_address(base58!(recipient)) || validate_contract(base58!(recipient)),
+        "release_tokens: inv recipient"
+    );
+    require!(amount > 0, "release_tokens: inv amount");
+    require!(gasless_reward >= 0, "release_tokens: inv gasless_reward");
 
     let normalized_amount = normalize_decimals(amount, DECIMALS, WEST_DECIMALS);
     let normalized_gasless = normalize_decimals(gasless_reward, DECIMALS, WEST_DECIMALS);
@@ -259,20 +316,24 @@ fn release_tokens(
     }
 
     let new_balance = get_storage!(integer::KEY_BALANCE) - normalized_amount;
-    require!(new_balance >= 0);
+    require!(new_balance >= 0, "release_tokens: new_balance < 0");
 
     set_storage!(integer::KEY_BALANCE => new_balance);
 }
 
 #[action]
-fn transfer_fee(execution_chain_id: Integer) {
-    require!(!get_storage!(boolean::KEY_PAUSED));
+fn transfer_fee() {
+    require!(!get_storage!(boolean::KEY_PAUSED), "transfer_fee: paused");
 
-    let chain_key = join!(string::KEY_CHAIN, SEP, to_string_int!(execution_chain_id));
-    require!(contains_key!(chain_key) && get_storage!(boolean::chain_key));
+    let fee_chain_id = get_storage!(integer::KEY_FEE_CHAIN);
+    let chain_key = join!(string::KEY_CHAIN, SEP, to_string_int!(fee_chain_id));
+    require!(
+        contains_key!(chain_key) && get_storage!(boolean::chain_key),
+        "transfer_fee: disabled chain"
+    );
 
-    let binding_key = join!(string::KEY_BINDING, SEP, to_string_int!(execution_chain_id));
-    require!(contains_key!(binding_key));
+    let binding_key = join!(string::KEY_BINDING, SEP, to_string_int!(fee_chain_id));
+    require!(contains_key!(binding_key), "transfer_fee: no binding");
     let binding_raw = get_storage!(string::binding_key);
 
     let mut binding_mut = binding_raw.as_bytes();
@@ -314,15 +375,15 @@ fn transfer_fee(execution_chain_id: Integer) {
 
     let fee_amount = get_storage!(integer::KEY_FEE);
 
-    require!(execution_asset.len() > 0);
-    require!(fee_amount >= min_amount);
-    require!(enabled);
+    require!(execution_asset.len() > 0, "transfer_fee: inv binding");
+    require!(fee_amount >= min_amount, "transfer_fee: less than min");
+    require!(enabled, "transfer_fee: binding disabled");
 
     let normalized_fee_amount = normalize_decimals(fee_amount, WEST_DECIMALS, DECIMALS);
 
     let root_adapter = base58!(get_storage!(string::KEY_ROOT_ADAPTER));
     call_contract! {
-        root_adapter_contract(root_adapter)::mint_tokens(execution_chain_id, execution_asset, normalized_fee_amount, get_storage!(string::KEY_FEE_RECIPIENT), 0, "", 0)
+        root_adapter_contract(root_adapter)::mint_tokens(fee_chain_id, execution_asset, normalized_fee_amount, get_storage!(string::KEY_FEE_RECIPIENT), 0, "", 0)
     };
 
     set_storage!(integer::KEY_BALANCE => get_storage!(integer::KEY_BALANCE) + fee_amount);
@@ -331,34 +392,30 @@ fn transfer_fee(execution_chain_id: Integer) {
 
 #[action]
 fn update_caller_contract(caller_contract: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        caller_contract.len() > 0,
+        "update_caller_contract: inv caller contract"
     );
-
-    require!(caller_contract.len() > 0);
 
     set_storage!(string::KEY_CALLER_CONTRACT => caller_contract);
 }
 
 #[action]
 fn update_execution_chain(execution_chain_id: Integer, enabled: Boolean) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        execution_chain_id >= 0,
+        "update_execution_chain: inv execution_chain_id"
     );
-
-    require!(execution_chain_id >= 0);
 
     set_storage!(boolean::join!(
         string::KEY_CHAIN,
@@ -369,38 +426,49 @@ fn update_execution_chain(execution_chain_id: Integer, enabled: Boolean) {
 
 #[action]
 fn update_fee_recipient(fee_recipient: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        fee_recipient.len() > 0,
+        "update_fee_recipient: inv fee_recipient"
     );
-
-    require!(fee_recipient.len() > 0);
 
     set_storage!(string::KEY_FEE_RECIPIENT => fee_recipient);
 }
 
 #[action]
-fn update_referrer(execution_chain_id: Integer, referrer: String, fee: Integer) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+fn update_fee_chain(fee_chain: Integer) {
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
-    require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
-    );
+    require!(fee_chain > 0, "update_fee_chain: inv fee_chain");
+
+    set_storage!(integer::KEY_FEE_CHAIN => fee_chain);
+}
+
+#[action]
+fn update_referrer(execution_chain_id: Integer, referrer: String, fee: Integer) {
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
     let chain_key = join!(string::KEY_CHAIN, SEP, to_string_int!(execution_chain_id));
-    require!(contains_key!(chain_key) && get_storage!(boolean::chain_key));
+    require!(
+        contains_key!(chain_key) && get_storage!(boolean::chain_key),
+        "update_referrer: disabled chain"
+    );
 
-    require!(referrer.len() > 0);
-    require!(fee >= 0 && fee <= MAX_REFERRER_FEE);
+    require!(referrer.len() > 0, "update_referrer: inv referrer");
+    require!(
+        fee >= 0 && fee <= MAX_REFERRER_FEE,
+        "update_referrer: inv fee"
+    );
 
     set_storage!(integer::join!(
         string::KEY_REFERRER_FEE_PERCENT,
@@ -422,23 +490,30 @@ fn update_binding_info(
     after_percent_fee: Integer,
     enabled: Boolean,
 ) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        execution_chain_id >= 0,
+        "update_binding_info: inv execution_chain_id"
     );
-
-    require!(execution_chain_id >= 0);
-    require!(execution_asset.len() > 0);
-    require!(min_amount >= 0);
-    require!(min_fee >= 0);
-    require!(threshold_fee >= 0);
-    require!(before_percent_fee >= 0);
-    require!(after_percent_fee >= 0);
+    require!(
+        execution_asset.len() > 0,
+        "update_binding_info: inv execution_asset"
+    );
+    require!(min_amount >= 0, "update_binding_info: inv min_amount");
+    require!(min_fee >= 0, "update_binding_info: inv min_fee");
+    require!(threshold_fee >= 0, "update_binding_info: inv threshold_fee");
+    require!(
+        before_percent_fee >= 0,
+        "update_binding_info: inv before_percent_fee"
+    );
+    require!(
+        after_percent_fee >= 0,
+        "update_binding_info: inv after_percent_fee"
+    );
 
     let binding = join!(
         string::execution_asset,
@@ -467,8 +542,11 @@ fn update_binding_info(
 fn pause() {
     let sender: String = to_base58_string!(tx!(sender));
 
-    require!(equals!(string::sender, get_storage!(string::KEY_PAUSER)));
-    require!(!get_storage!(boolean::KEY_PAUSED));
+    require!(
+        equals!(string::sender, get_storage!(string::KEY_PAUSER)),
+        "pause: not pauser"
+    );
+    require!(!get_storage!(boolean::KEY_PAUSED), "pause: paused");
 
     set_storage!(boolean::KEY_PAUSED => true);
 }
@@ -477,42 +555,41 @@ fn pause() {
 fn unpause() {
     let sender: String = to_base58_string!(tx!(sender));
 
-    require!(equals!(string::sender, get_storage!(string::KEY_PAUSER)));
-    require!(get_storage!(boolean::KEY_PAUSED));
+    require!(
+        equals!(string::sender, get_storage!(string::KEY_PAUSER)),
+        "unpause: not pauser"
+    );
+    require!(get_storage!(boolean::KEY_PAUSED), "unpause: not paused");
 
     set_storage!(boolean::KEY_PAUSED => false);
 }
 
 #[action]
 fn update_pauser(new_pauser: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        validate_address(base58!(new_pauser)),
+        "update_pauser: inv pauser"
     );
-
-    require!(validate_address(base58!(new_pauser)));
 
     set_storage!(string::KEY_PAUSER => new_pauser);
 }
 
 #[action]
 fn update_multisig(new_multisig: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
     require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
+        validate_contract(base58!(new_multisig)),
+        "update_multisig: inv new_multisig"
     );
-
-    require!(validate_contract(base58!(new_multisig)));
 
     set_storage!(string::KEY_MULTISIG => new_multisig);
 }

@@ -21,6 +21,8 @@ export default async function (
   let executorContractAddress = '';
   let bridgeAdapterContractAddress = '';
   let feeRecipientAddress = '';
+  let feeChainId = 1;
+  let callerContractAddress = '';
   switch (network.name) {
     case 'mainnet':
       multisigContractAddress = '';
@@ -35,6 +37,8 @@ export default async function (
       bridgeAdapterContractAddress =
         '5JJ9nFhnPdrwRm5d6ZT46BqwntXEgkjgXkrtrRo94kQk';
       feeRecipientAddress = '3N1VhCMKNh2SBgw9mhdLRBjyucnv6fkMNBA';
+      feeChainId = 10001;
+      callerContractAddress = '3N7gP7bxevss5mVwkvMMJCnzPSP8c1YJCjw';
       break;
   }
 
@@ -47,6 +51,8 @@ export default async function (
       { type: 'string', key: 'adapter', value: bridgeAdapterContractAddress },
       { type: 'string', key: 'pauser', value: deployerAddress },
       { type: 'string', key: 'fee_recipient', value: feeRecipientAddress },
+      { type: 'integer', key: 'fee_chain_id', value: feeChainId },
+      { type: 'string', key: 'caller_contract', value: callerContractAddress },
     ],
     [],
     deployerPrivateKey,

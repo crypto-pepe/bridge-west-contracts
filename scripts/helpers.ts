@@ -109,6 +109,10 @@ export const broadcastTx = async (
   const we = new We(network.nodeAPI);
   const txId = await tx.getId();
 
+  if (network.apiKey !== '') {
+    we.setApiKey(network.apiKey);
+  }
+
   await we.broadcast(tx).catch((e) => {
     throw e;
   });

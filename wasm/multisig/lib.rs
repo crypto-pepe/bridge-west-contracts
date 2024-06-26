@@ -4,6 +4,7 @@
 use we_cdk::*;
 
 const SEP: String = "__";
+const KEY_INIT: String = "INIT";
 const KEY_THIS: String = "THIS";
 const KEY_MULTISIG: String = "MULTISIG";
 const KEY_STATUS: String = "STATUS";
@@ -17,8 +18,29 @@ fn validate_contract(contract: &[u8]) -> bool {
     contract.len() == 32
 }
 
+#[no_mangle]
+#[inline(always)]
+fn verify_multisig_confirmation() -> i32 {
+    unsafe {
+        let tx_id = to_base58_string!(tx!(tx_id));
+        let this = get_storage!(string::KEY_THIS);
+        let multisig = get_storage!(string::KEY_MULTISIG);
+
+        let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
+        require!(
+            contains_key!(base58!(multisig) => status_key)
+                && get_storage!(boolean::base58!(multisig) => status_key),
+            "verify_multisig_confirmation: revert"
+        );
+    }
+
+    0
+}
+
 #[action]
 fn _constructor(owners: String, quorum: Integer) {
+    require!(!contains_key!(KEY_INIT), "_constructor: already inited");
+
     let mut owners_mut = owners.as_bytes();
     let mut owners_size = 0;
 
@@ -26,7 +48,7 @@ fn _constructor(owners: String, quorum: Integer) {
         let index = index_of!(owners_mut, SEP);
         if index == -1 {
             let owner = owners_mut;
-            require!(validate_contract(base58!(owner)));
+            require!(validate_contract(base58!(owner)), "_constructor: inv owner");
             owners_size += 1;
             break;
         }
@@ -34,13 +56,17 @@ fn _constructor(owners: String, quorum: Integer) {
         let owner = take!(owners_mut, index);
         owners_mut = drop!(owners_mut, index + SEP_SIZE);
 
-        require!(validate_contract(base58!(owner)));
+        require!(validate_contract(base58!(owner)), "_constructor: inv owner");
         owners_size += 1;
     }
 
-    require!(quorum > 0);
-    require!(quorum <= owners_size);
+    require!(quorum > 0, "_constructor: inv quorum > 0");
+    require!(
+        quorum <= owners_size,
+        "_constructor: inv quorum <= owners_size"
+    );
 
+    set_storage!(boolean::KEY_INIT => true);
     set_storage!(string::KEY_THIS => to_base58_string!(tx!(tx_id)));
     set_storage!(string::KEY_MULTISIG => to_base58_string!(tx!(tx_id)));
     set_storage!(string::KEY_PUBLIC_KEYS => owners);
@@ -49,19 +75,18 @@ fn _constructor(owners: String, quorum: Integer) {
 
 #[action]
 fn add_owner(new_owner: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
     let owners = get_storage!(string::KEY_PUBLIC_KEYS);
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
-    require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
-    );
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    require!(validate_contract(base58!(new_owner)));
-    require!(!contains!(owners, new_owner));
+    require!(
+        validate_contract(base58!(new_owner)),
+        "add_owner: inv new_owner"
+    );
+    require!(!contains!(owners, new_owner), "add_owner: already exists");
 
     let owners_updated = join!(string::owners, SEP, new_owner);
     set_storage!(string::KEY_PUBLIC_KEYS => owners_updated);
@@ -69,20 +94,22 @@ fn add_owner(new_owner: String) {
 
 #[action]
 fn remove_owner(old_owner: String) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
     let owners = get_storage!(string::KEY_PUBLIC_KEYS);
     let quorum: Integer = get_storage!(integer::KEY_QUORUM);
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
-    require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
-    );
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
-    require!(validate_contract(base58!(old_owner)));
-    require!(contains!(owners, old_owner));
+    require!(
+        validate_contract(base58!(old_owner)),
+        "remove_owner: inv old_owner"
+    );
+    require!(
+        contains!(owners, old_owner),
+        "remove_owner: old_owner not exist"
+    );
 
     let mut owners_mut = owners.as_bytes();
     let mut owners_size = 0;
@@ -96,7 +123,7 @@ fn remove_owner(old_owner: String) {
         owners_mut = drop!(owners_mut, index + SEP_SIZE);
         owners_size += 1;
     }
-    require!(owners_size > 1);
+    require!(owners_size > 1, "remove_owner: no owners left");
 
     owners_mut = owners.as_bytes();
     let index = index_of!(owners_mut, old_owner);
@@ -119,16 +146,12 @@ fn remove_owner(old_owner: String) {
 
 #[action]
 fn set_quorum(quorum: Integer) {
-    let tx_id = to_base58_string!(tx!(tx_id));
-    let this = get_storage!(string::KEY_THIS);
-    let multisig = get_storage!(string::KEY_MULTISIG);
     let owners = get_storage!(string::KEY_PUBLIC_KEYS);
 
-    let status_key = join!(string::KEY_STATUS, SEP, this, SEP, tx_id);
-    require!(
-        contains_key!(base58!(multisig) => status_key)
-            && get_storage!(boolean::base58!(multisig) => status_key)
-    );
+    let exitcode = verify_multisig_confirmation();
+    if exitcode != 0 {
+        return exitcode;
+    }
 
     let mut owners_mut = owners.as_bytes();
     let mut owners_size = 0;
@@ -143,8 +166,11 @@ fn set_quorum(quorum: Integer) {
         owners_size += 1;
     }
 
-    require!(quorum > 0);
-    require!(quorum <= owners_size);
+    require!(quorum > 0, "set_quorum: inv quorum > 0");
+    require!(
+        quorum <= owners_size,
+        "set_quorum: inv quorum <= owners_size"
+    );
 
     set_storage!(integer::KEY_QUORUM => quorum);
 }
@@ -156,18 +182,36 @@ fn confirm_transaction(dapp: String, tx_id: String) {
     let quorum: Integer = get_storage!(integer::KEY_QUORUM);
 
     let confirmations_key = join!(string::KEY_CONFIRM, SEP, dapp, SEP, tx_id);
-    let status_key = join!(string::KEY_STATUS, SEP, dapp, SEP, tx_id);
-
     let confirmations = if contains_key!(confirmations_key) {
         get_storage!(string::confirmations_key)
     } else {
         ""
     };
 
-    require!(validate_contract(base58!(dapp)));
-    require!(validate_contract(base58!(tx_id)));
-    require!(contains!(owners, sender_public_key));
-    require!(!contains!(confirmations, sender_public_key));
+    let status_key = join!(string::KEY_STATUS, SEP, dapp, SEP, tx_id);
+    let status = if contains_key!(status_key) {
+        get_storage!(boolean::status_key)
+    } else {
+        false
+    };
+
+    require!(
+        validate_contract(base58!(dapp)),
+        "confirm_transaction: inv dapp"
+    );
+    require!(
+        validate_contract(base58!(tx_id)),
+        "confirm_transaction: inv tx_id"
+    );
+    require!(
+        contains!(owners, sender_public_key),
+        "confirm_transaction: inv caller"
+    );
+    require!(
+        !contains!(confirmations, sender_public_key),
+        "confirm_transaction: already confirmed by caller"
+    );
+    require!(!status, "confirm_transaction: already confirmed");
 
     let confirmations_updated;
     if confirmations.len() == 0 {
@@ -213,11 +257,23 @@ fn revoke_confirmation(dapp: String, tx_id: String) {
         false
     };
 
-    require!(validate_contract(base58!(dapp)));
-    require!(validate_contract(base58!(tx_id)));
-    require!(contains!(owners, sender_public_key));
-    require!(contains!(confirmations, sender_public_key));
-    require!(!status);
+    require!(
+        validate_contract(base58!(dapp)),
+        "revoke_confirmation: inv dapp"
+    );
+    require!(
+        validate_contract(base58!(tx_id)),
+        "revoke_confirmation: inv tx_id"
+    );
+    require!(
+        contains!(owners, sender_public_key),
+        "revoke_confirmation: inv caller"
+    );
+    require!(
+        contains!(confirmations, sender_public_key),
+        "revoke_confirmation: not confirmed by caller"
+    );
+    require!(!status, "revoke_confirmation: already confirmed");
 
     let mut confirmations_mut = confirmations.as_bytes();
     let mut confirmations_size = 0;

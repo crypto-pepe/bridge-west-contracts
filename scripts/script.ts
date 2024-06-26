@@ -180,5 +180,5 @@ export const redeployWasmScript = async (
     proofs.forEach((proof) => signedTx.proofs.add(proof));
   }
 
-  return broadcastTx(signedTx, network);
+  return broadcastTx(signedTx, network, true);
 };
