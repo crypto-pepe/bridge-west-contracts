@@ -204,7 +204,12 @@ fn lock_tokens(
             3 => threshold_fee = parse_int!(field),
             4 => before_percent_fee = parse_int!(field),
             5 => after_percent_fee = parse_int!(field),
-            6 => enabled = parse_bool!(field),
+            6 => {
+                enabled = match parse_int!(field) {
+                    0 => false,
+                    _ => true,
+                }
+            }
             _ => {}
         }
 
@@ -362,7 +367,14 @@ fn transfer_fee() {
             3 => _threshold_fee = parse_int!(field),
             4 => _before_percent_fee = parse_int!(field),
             5 => _after_percent_fee = parse_int!(field),
-            6 => enabled = parse_bool!(field),
+            6 => {
+                enabled = {
+                    match parse_int!(field) {
+                        0 => false,
+                        _ => true,
+                    }
+                }
+            }
             _ => {}
         }
 
@@ -528,7 +540,7 @@ fn update_binding_info(
         SEP,
         to_string_int!(after_percent_fee),
         SEP,
-        to_string_bool!(enabled)
+        to_string_int!(if enabled { 1 } else { 0 })
     );
 
     set_storage!(string::join!(
