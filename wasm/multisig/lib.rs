@@ -310,5 +310,4 @@ fn revoke_confirmation(dapp: String, tx_id: String) {
     }
 
     set_storage!(string::confirmations_key => confirmations_mut);
-    set_storage!(boolean::status_key => confirmations_size - 1 >= quorum);
 }
