@@ -241,6 +241,7 @@ fn set_wrapped_token_bridge_contract(contract: String) {
 #[action]
 fn pause() {
     let sender: String = to_base58_string!(tx!(sender));
+    require!(to_base58_string!(caller!()).len() == 0);
 
     require!(
         equals!(string::sender, get_storage!(string::KEY_PAUSER)),
@@ -254,6 +255,7 @@ fn pause() {
 #[action]
 fn unpause() {
     let sender: String = to_base58_string!(tx!(sender));
+    require!(to_base58_string!(caller!()).len() == 0);
 
     require!(
         equals!(string::sender, get_storage!(string::KEY_PAUSER)),

@@ -28,9 +28,9 @@ export default async function (
       throw 'todo'; // TODO: set
       break;
     case 'testnet':
-      multisigContractAddress = '9Zr9mUTwe62HBCpe7XTpJsJteLT4CpMrrQMaG4ry1VPE';
-      bridgeAdapterAddress = '5JJ9nFhnPdrwRm5d6ZT46BqwntXEgkjgXkrtrRo94kQk';
-      protocolCallerAddress = 'S5pgcet8rVx4DuubdQcwBhmzDSLLmpSWEGqF7gWd9Pt';
+      multisigContractAddress = '73YBejz5FnV1csCwErwC6CS5tt7VY1cpS8eRfgWfJd3F';
+      bridgeAdapterAddress = '6eF3nNZhKc8ahA6NDpCXj7tVA6naXnoDuyiHV12KJmip';
+      protocolCallerAddress = '59aJQqPYsH5nkVnXrqR7DhHDV91kmVhdvQXofQn72wmX';
       break;
   }
 

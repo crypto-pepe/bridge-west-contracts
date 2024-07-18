@@ -19,6 +19,8 @@ fn _constructor() {
 #[action]
 fn set_completed(completed: Integer) {
     let sender = to_base58_string!(tx!(sender));
+    require!(to_base58_string!(caller!()).len() == 0);
+
     let owner = get_storage!(string::KEY_OWNER);
     require!(equals!(string::sender, owner));
 

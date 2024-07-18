@@ -20,7 +20,7 @@ export default async function (
       break;
     case 'testnet':
       coinBridgeContractAddress =
-        '3n3h2mZcwZeymdE1qwTtmaXpSB4MsyZQA2W1LB3Tr9ir';
+        'Fm8go79jJY2oh86PGKqWvuHwYYFMp7HcLjyyPKG9KiGa';
       callerContractAddress = '3N7gP7bxevss5mVwkvMMJCnzPSP8c1YJCjw';
       break;
   }

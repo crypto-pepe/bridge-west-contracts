@@ -32,10 +32,10 @@ export default async function (
       throw 'todo'; // TODO: set
       break;
     case 'testnet':
-      multisigContractAddress = '9Zr9mUTwe62HBCpe7XTpJsJteLT4CpMrrQMaG4ry1VPE';
-      executorContractAddress = '5uzd6TigKZVggtHWmqzGHyif2Cqojxnx1aq9YhhMZ4hP';
+      multisigContractAddress = '73YBejz5FnV1csCwErwC6CS5tt7VY1cpS8eRfgWfJd3F';
+      executorContractAddress = 'GMRbgPfkih3aXMpxUcPZ2XpSwBqVTKNoURs4vE1ewASK';
       bridgeAdapterContractAddress =
-        '5JJ9nFhnPdrwRm5d6ZT46BqwntXEgkjgXkrtrRo94kQk';
+        '6eF3nNZhKc8ahA6NDpCXj7tVA6naXnoDuyiHV12KJmip';
       feeRecipientAddress = '3N1VhCMKNh2SBgw9mhdLRBjyucnv6fkMNBA';
       feeChainId = 10001;
       callerContractAddress = '3N7gP7bxevss5mVwkvMMJCnzPSP8c1YJCjw';

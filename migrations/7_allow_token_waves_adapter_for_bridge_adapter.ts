@@ -24,9 +24,9 @@ export default async function (
       break;
     case 'testnet':
       bridgeAdapterContractAddress =
-        '5JJ9nFhnPdrwRm5d6ZT46BqwntXEgkjgXkrtrRo94kQk';
+        '6eF3nNZhKc8ahA6NDpCXj7tVA6naXnoDuyiHV12KJmip';
       tokenWavesAdapterContractAddress =
-        'HSNBZeJ858vG11a7fB1x65Y5ok4cTR6RhJzcpZo7tHTU';
+        'E5wD1qGQzqsTwycz8n7VCYtqBvVFZDAzsZcH9TH68rAS';
       executionChainId = 10001;
       break;
   }

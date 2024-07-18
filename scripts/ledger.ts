@@ -43,22 +43,6 @@ import { NetworkConfig } from './network';
       networkName = answers.network;
       dappToConfirm = answers.dapp;
       txToConfirm = answers.tx;
-      // switch (answers.network) {
-      //   case 'mainnet':
-      //     // switch (answers.chain) {
-      //     //   case 'waves':
-      //     //     networkByte = 87;
-      //     //     break;
-      //     //   case 'west':
-      //     //     networkByte = 86;
-      //     //     break;
-      //     // }
-      //     networkByte = 86;
-      //     break;
-      //   case 'testnet':
-      //     networkByte = 84;
-      //     break;
-      // }
     })
     .catch((e) => {
       throw JSON.stringify(e);
@@ -86,6 +70,8 @@ import { NetworkConfig } from './network';
   const network: NetworkConfig = getEnvironmentByName(networkName).network;
   const multisigContractAddress =
     getEnvironmentByName(networkName).multisigContractAddress;
+  const multisigContractVersion =
+    getEnvironmentByName(networkName).multisigContractVersion;
 
   let userId = -1;
   let userIdConfirmed = false;
@@ -165,31 +151,9 @@ import { NetworkConfig } from './network';
     transport: TransportNodeHid,
   });
 
-  // const tx = TRANSACTIONS.Transfer.V3({
-  //   recipient: '3MpHCHnKPqXVEbypoGFSQq3r2qNZVqfe7zY',
-  //   amount: 100000000,
-  //   assetId: undefined,
-  //   attachment: '',
-  //   fee: 1000000,
-  //   feeAssetId: undefined,
-  //   senderPublicKey: 'yMQKms5WvLvobErygwGjByEuNuebLMGXHndfVDsjMVD',
-  // });
-
-  // const tx = TRANSACTIONS.CallContract.V7({
-  //   contractId: 'FzXKFUN1VKSr6D5LgxmHEaD9rPkK3uwnHsStMA3SrnSJ',
-  //   contractVersion: 1,
-  //   contractEngine: 'wasm',
-  //   callFunc: 'set_completed',
-  //   params: [{ type: 'integer', key: 'completed', value: 23 }],
-  //   payments: [],
-  //   fee: network.invokeFee,
-  //   feeAssetId: undefined,
-  //   senderPublicKey: user.publicKey,
-  // });
-
   const tx = TRANSACTIONS.CallContract.V7({
     contractId: multisigContractAddress,
-    contractVersion: 1,
+    contractVersion: multisigContractVersion,
     contractEngine: 'wasm',
     callFunc: 'confirm_transaction',
     params: [
@@ -215,6 +179,7 @@ import { NetworkConfig } from './network';
 
   signedTx.setId(txId);
   signedTx.proofs.add(signature);
+  console.log(txId);
 
   const broadcastedTx = await broadcastTx(signedTx, network, true).catch(
     (e) => {

@@ -39,7 +39,8 @@
       "setWasmScriptFee": 100000000,
       "setScriptFee": 1400000
     },
-    "migrationContractAddress": "BStyatzGv2Hj1uCaGxymvLtYSEC3pzqrdUngrEopxVXf",
-    "multisigContractAddress": "9Zr9mUTwe62HBCpe7XTpJsJteLT4CpMrrQMaG4ry1VPE"
+    "migrationContractAddress": "GMi6DmpVDaf45XkT9yTVPoEVxd1ND7LCxeieKhLGiSAj",
+    "multisigContractAddress": "73YBejz5FnV1csCwErwC6CS5tt7VY1cpS8eRfgWfJd3F",
+    "multisigContractVersion": 1
   }
 }

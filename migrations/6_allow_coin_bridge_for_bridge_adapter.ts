@@ -22,9 +22,9 @@ export default async function (
       break;
     case 'testnet':
       bridgeAdapterContractAddress =
-        '5JJ9nFhnPdrwRm5d6ZT46BqwntXEgkjgXkrtrRo94kQk';
+        '6eF3nNZhKc8ahA6NDpCXj7tVA6naXnoDuyiHV12KJmip';
       coinBridgeContractAddress =
-        '3n3h2mZcwZeymdE1qwTtmaXpSB4MsyZQA2W1LB3Tr9ir';
+        'Fm8go79jJY2oh86PGKqWvuHwYYFMp7HcLjyyPKG9KiGa';
       break;
   }
 

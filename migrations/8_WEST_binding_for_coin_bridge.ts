@@ -24,7 +24,7 @@ export default async function (
       break;
     case 'testnet':
       coinBridgeContractAddress =
-        '3n3h2mZcwZeymdE1qwTtmaXpSB4MsyZQA2W1LB3Tr9ir';
+        'Fm8go79jJY2oh86PGKqWvuHwYYFMp7HcLjyyPKG9KiGa';
       executionChainId = 10001;
       executionAsset = '3MtgBm7ZQPKWvxURxT16Vujk1iEdoefbv8o';
       break;

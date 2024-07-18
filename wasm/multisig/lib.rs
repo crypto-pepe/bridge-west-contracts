@@ -178,6 +178,8 @@ fn set_quorum(quorum: Integer) {
 #[action]
 fn confirm_transaction(dapp: String, tx_id: String) {
     let sender_public_key = to_base58_string!(tx!(sender_public_key));
+    require!(to_base58_string!(caller!()).len() == 0);
+
     let owners = get_storage!(string::KEY_PUBLIC_KEYS);
     let quorum: Integer = get_storage!(integer::KEY_QUORUM);
 
@@ -240,6 +242,8 @@ fn confirm_transaction(dapp: String, tx_id: String) {
 #[action]
 fn revoke_confirmation(dapp: String, tx_id: String) {
     let sender_public_key = to_base58_string!(tx!(sender_public_key));
+    require!(to_base58_string!(caller!()).len() == 0);
+
     let owners = get_storage!(string::KEY_PUBLIC_KEYS);
     let quorum: Integer = get_storage!(integer::KEY_QUORUM);
 
