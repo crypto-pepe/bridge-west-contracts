@@ -56,6 +56,10 @@ fn _constructor(owners: String, quorum: Integer) {
         let owner = take!(owners_mut, index);
         owners_mut = drop!(owners_mut, index + SEP_SIZE);
 
+        require!(
+            !contains!(owners_mut, owner),
+            "_constructor: duplicate owner"
+        );
         require!(validate_contract(base58!(owner)), "_constructor: inv owner");
         owners_size += 1;
     }
